@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+
+  work-with-service:
+    runs-on: ubuntu-latest # Change to specific version later
+
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: test_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
+      - name: Wait for PostgreSQL to be ready
+        run: |
+          echo "⏳ Waiting for PostgreSQL to start..."
+          for i in {1..30}; do
+            if pg_isready -h localhost -U postgres -d test_db; then
+              echo "✅ PostgreSQL is ready!"
+              break
+            fi
+            sleep 2
+            if [ $i -eq 30 ]; then
+              echo "❌ PostgreSQL failed to start"
+              exit 1
+            fi
+          done
+
+      - name: Test PostgreSQL connection
+        run: |
+          echo "🔗 Testing connection..."
+          PGPASSWORD=postgres psql -h localhost -U postgres -d test_db -c "SELECT '✅ Connected successfully!' as status;"
+
+      - name: Show PostgreSQL version
+        run: |
+          echo "📊 PostgreSQL version:"
+          PGPASSWORD=postgres psql -h localhost -U postgres -d test_db -c "SELECT version();"
